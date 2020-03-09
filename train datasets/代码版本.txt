@@ -1,0 +1,243 @@
+import tensorflow as tf
+from tensorflow.examples.tutorials.mnist import input_data
+
+mnist = input_data.read_data_sets('MNIST_data', one_hot=True)   # one_hot 编码 [1 0 0 0]
+sess = tf.InteractiveSession()
+
+x = tf.placeholder("float", shape=[None, 784], name='x')  # 输入
+y_ = tf.placeholder("float", shape=[None, 10], name='y_')  # 实际值
+
+# 初始化权重
+def weight_variable(shape):
+    initial = tf.truncated_normal(shape, stddev=0.1)  # 产生正态分布 标准差0.1
+    return tf.Variable(initial)
+# 初始化偏置
+def bias_variable(shape):
+    initial = tf.constant(0.1, shape=shape)  # 定义常量
+    return tf.Variable(initial)
+'''
+tf.nn.conv2d(input, filter, strides, padding, use_cudnn_on_gpu=None, name=None)
+input: 输入图像，张量[batch, in_height, in _width, in_channels]
+filter: 卷积核， 张量[filter_height, filter _width, in_channels, out_channels]
+strides: 步长，一维向量，长度4
+padding：卷积方式，'SAME' 'VALID'
+'''
+# 卷积层
+def conv2d(x,W):
+    return tf.nn.conv2d(x, W, strides=[1, 1, 1, 1], padding='SAME')
+'''
+tf.nn.max_pool(value, ksize, strides, padding, name=None)
+value: 输入，一般是卷积层的输出 feature map
+ksize: 池化窗口大小，[1, height, width, 1]
+strides: 窗口每个维度滑动步长 [1, strides, strides, 1]
+padding：和卷积类似，'SAME' 'VALID'
+'''
+# 池化层
+def max_pool_2x2(x):
+    return tf.nn.max_pool(x, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')  # 最大池化
+
+# 第一层卷积  卷积在每个5*5中算出32个特征
+W_conv1 = weight_variable([5, 5, 1, 32])
+b_conv1 = bias_variable([32])
+
+x_image = tf.reshape(x, [-1, 28, 28, 1])
+h_conv1 = tf.nn.relu(conv2d(x_image, W_conv1) + b_conv1)
+h_pool1 = max_pool_2x2(h_conv1)
+
+# 第二层卷积
+W_conv2 = weight_variable([5, 5, 32, 64])
+b_conv2 = bias_variable([64])
+
+h_conv2 = tf.nn.relu(conv2d(h_pool1, W_conv2) + b_conv2)
+h_pool2 = max_pool_2x2(h_conv2)
+
+# 密集连接层  图片尺寸缩减到了7*7， 本层用1024个神经元处理
+W_fc1 = weight_variable([7 * 7 * 64, 1024])
+b_fc1 = bias_variable([1024])
+
+h_pool2_flat = tf.reshape(h_pool2, [-1, 7 * 7 * 64])
+h_fc1 = tf.nn.relu(tf.matmul(h_pool2_flat, W_fc1) + b_fc1)
+
+# dropout 防止过拟合
+keep_prob = tf.placeholder("float", name='keep_prob')
+h_fc1_drop = tf.nn.dropout(h_fc1, keep_prob)
+
+# 输出层  最后添加一个Softmax层
+W_fc2 = weight_variable([1024, 10])
+b_fc2 = bias_variable([10])
+
+y_conv = tf.matmul(h_fc1_drop, W_fc2) + b_fc2
+
+# 训练和评估模型
+cross_entropy = - tf.reduce_sum(y_ * tf.log(y_conv))
+train_step = tf.train.AdamOptimizer(1e-4).minimize(cross_entropy)
+correct_prediction = tf.equal(tf.argmax(y_conv, 1), tf.argmax(y_, 1))
+accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float"))
+sess.run(tf.global_variables_initializer())
+
+saver = tf.train.Saver()
+
+for i in range(1000):
+    batch = mnist.train.next_batch(50)
+    if i % 100 == 0:
+        train_accuracy = accuracy.eval(feed_dict={x: batch[0], y_: batch[1], keep_prob: 1.0})
+        print("step %d, training accuracy %g"%(i, train_accuracy))
+    train_step.run(feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5})
+
+
+# 保存模型
+
+saver.save(sess, 'D:/桌面/MyFile/大创项目/训练集/model.ckpt')
+
+from PIL import Image
+import tensorflow as tf
+
+def imageprepare():
+    file_name = 'D:/桌面/MyFile/大创项目/训练集/图片/20170623090803616.png'
+    myimage = Image.open(file_name)
+    myimage = myimage.resize((28, 28), Image.ANTIALIAS).convert('L')  #变换成28*28像素，并转换成灰度图
+    tv = list(myimage.getdata())  # 获取像素值
+    tva = [(255-x)*1.0/255.0 for x in tv]  # 转换像素范围到[0 1], 0是纯白 1是纯黑
+    return tva
+
+result = imageprepare()
+init = tf.global_variables_initializer()
+saver = tf.train.Saver 
+
+with tf.Session() as sess:
+    sess.run(init)
+    saver = tf.train.import_meta_graph('model.ckpt.meta')  # 载入模型结构
+    saver.restore(sess,  'model.ckpt')  # 载入模型参数
+
+    graph = tf.get_default_graph()  # 加载计算图
+    x = graph.get_tensor_by_name("x:0")  # 从模型中读取占位符张量
+    keep_prob = graph.get_tensor_by_name("keep_prob:0")
+
+    prediction = y_conv
+    predint = prediction.eval(feed_dict={x: [result], keep_prob: 1.0}, session=sess)  # feed_dict输入数据给placeholder占位符
+    print(predint) # 打印预测结果
+
+#####################################################################################
+import tensorflow as tf
+from tensorflow.examples.tutorials.mnist import input_data
+
+#number 1 to 10 data
+mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
+sess = tf.InteractiveSession()
+def compute_accuracy(v_xs, v_ys):
+  global prediction
+  y_pre = sess.run(prediction, feed_dict={xs:v_xs, keep_prob:1})
+  correct_prediction = tf.equal(tf.argmax(y_pre, 1), tf.argmax(v_ys, 1))
+  accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+  result = sess.run(accuracy, feed_dict={xs:v_xs, ys:v_ys, keep_prob:1})
+  return result
+
+
+def weight_variable(shape):
+  initial = tf.truncated_normal(shape, stddev=0.1) # initial variables with normal distribution
+  return tf.Variable(initial)
+  
+
+def bias_variable(shape):
+  initial = tf.constant(0.1, shape=shape)
+  return tf.Variable(initial)
+
+
+def conv2d(x, W):
+  #strides [1, x_movement, y_movement, 1]
+  #Must have strides[0] = strides[3] = 1
+  return tf.nn.conv2d(x, W, strides=[1,1,1,1], padding = 'SAME')
+
+
+def max_pool_2x2(x):
+  #strides [1, x_movement, y_movement, 1]
+  #Msut have strides[0] = strides[3] = 1
+  return tf.nn.max_pool(x, ksize=[1,2,2,1], strides = [1,2,2,1], padding = 'SAME')
+  
+
+#define placeholder for inputs to network
+xs = tf.placeholder(tf.float32, [None, 784])
+ys = tf.placeholder(tf.float32, [None, 10])
+keep_prob = tf.placeholder(tf.float32)
+x_image = tf.reshape(xs, [-1, 28, 28, 1])
+#print(x_image.shape) #[n_sample, 28, 28, 1]
+
+
+## conv1 layer ##
+W_conv1 = weight_variable([5,5,1,32])#patch 5x5, in in size 1, out size 32
+b_conv1 = bias_variable([32])
+h_conv1 = tf.nn.relu(conv2d(x_image, W_conv1) + b_conv1) # outpur size 28x28x32
+h_pool1 = max_pool_2x2(h_conv1)# outpur size 14x14x32
+
+## conv2 layer ##
+W_conv2 = weight_variable([5,5,32, 64])#patch 5x5, in in size 1, out size 32
+b_conv2 = bias_variable([64])
+h_conv2 = tf.nn.relu(conv2d(h_pool1, W_conv2) + b_conv2) # outpur size 14x14x32
+h_pool2 = max_pool_2x2(h_conv2)# outpur size 7x7x32
+
+## func1 layer ##
+W_fc1 = weight_variable([7*7*64, 1024])
+b_fc1 = bias_variable([1024])
+ # [n_sample, 7,7,64] ->> [n_sample, 7*7*64]
+h_pool2_flat = tf.reshape(h_pool2, [-1, 7*7*64])
+h_fc1 = tf.nn.relu(tf.matmul(h_pool2_flat, W_fc1) + b_fc1)
+h_fc1_drop = tf.nn.dropout(h_fc1, keep_prob)
+
+## func2 layer ##
+W_fc2 = weight_variable([1024, 10])
+b_fc2 = bias_variable([10])
+
+prediction = tf.matmul(h_fc1_drop, W_fc2) + b_fc2
+
+
+
+# the error between prediction and real data
+loss = tf.reduce_mean(tf.reduce_sum(tf.square(ys - prediction),
+                     reduction_indices=[1]))
+train_step = tf.train.AdamOptimizer(1e-4).minimize(loss)
+
+
+
+sess.run(tf.global_variables_initializer())
+
+saver = tf.train.Saver()
+
+
+for i in range(200):
+  batch_xs, batch_ys = mnist.train.next_batch(100)
+  sess.run(train_step, feed_dict = {xs:batch_xs, ys:batch_ys, keep_prob:0.8})
+  if i% 50 == 0:
+    print(compute_accuracy(mnist.test.images, mnist.test.labels))
+
+
+
+
+saver.save(sess, 'D:/桌面/MyFile/大创项目/训练集/model.ckpt')
+
+from PIL import Image
+import tensorflow as tf
+
+def imageprepare():
+    file_name = 'D:/桌面/MyFile/大创项目/训练集/图片/20170623090803616.png'
+    myimage = Image.open(file_name)
+    myimage = myimage.resize((28, 28), Image.ANTIALIAS).convert('L')  #变换成28*28像素，并转换成灰度图
+    tv = list(myimage.getdata())  # 获取像素值
+    tva = [(255-x)*1.0/255.0 for x in tv]  # 转换像素范围到[0 1], 0是纯白 1是纯黑
+    return tva
+
+result = imageprepare()
+init = tf.global_variables_initializer()
+saver = tf.train.Saver 
+
+with tf.Session() as sess:
+    sess.run(init)
+    saver = tf.train.import_meta_graph('model.ckpt.meta')  # 载入模型结构
+    saver.restore(sess,  'model.ckpt')  # 载入模型参数
+
+    graph = tf.get_default_graph()  # 加载计算图
+    x = graph.get_tensor_by_name("xs:0")  # 从模型中读取占位符张量
+    keep_prob = graph.get_tensor_by_name("keep_prob:0")
+
+    prediction = y_conv
+    predint = prediction.eval(feed_dict={xs: [result], keep_prob: 1.0}, session=sess)  # feed_dict输入数据给placeholder占位符
+    print(predint) # 打印预测结果
